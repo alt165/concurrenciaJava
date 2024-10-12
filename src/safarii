@@ -1,0 +1,112 @@
+import javax.imageio.plugins.jpeg.JPEGImageReadParam;
+import java.util.LinkedList;
+import java.util.Queue;
+import java.util.concurrent.Semaphore;
+import java.util.concurrent.ThreadLocalRandom;
+
+public class Safari2 extends Atraccion {
+    private final Semaphore[] semaforoVehiculo = new Semaphore[Constantes.NUM_VEHICULOS];
+    private final Semaphore semaphoreSafari = new Semaphore(Constantes.CAPACIDAD_SAFARI, true);
+    private Queue<Persona> filaVehiculoIda = new LinkedList<>();
+    private Queue<Persona> filaVehiculoRegreso = new LinkedList<>();
+    private int[] vehiculosTransportados = new int[Constantes.NUM_VEHICULOS];
+    private int indiceVehiculo = 0;
+
+    public Safari2() {
+        super("Safari2", Constantes.CAPACIDAD_SAFARI);
+        for (int i = 0; i < Constantes.NUM_VEHICULOS; i++) {
+            semaforoVehiculo[i] = new Semaphore(1, true); // Cada vehículo tiene un semáforo para su uso
+        }
+    }
+
+    @Override
+    public void entrar(Persona persona) throws InterruptedException {
+        semaphoreSafari.acquire();
+        irSafari(persona);
+        salir(persona);
+    }
+
+    @Override
+    public void salir(Persona persona) {
+        System.out.println(persona + " sale del safari");
+        semaphoreSafari.release();
+    }
+
+    private void irSafari(Persona persona) throws InterruptedException {
+        synchronized (filaVehiculoIda) {
+            System.out.println(persona + " quiere ir al safari.");
+
+            // Esperar a que haya espacio en un vehículo de ida
+            this.agregarAFilaIda(persona);
+            if (filaVehiculoIda.size() >= Constantes.CAPACIDAD_VEHICULO) {
+                int vehiculoAsignado = asignarVehiculo();
+                vehiculosTransportados[vehiculoAsignado] = Constantes.CAPACIDAD_VEHICULO;
+                if (vehiculoAsignado != -1) {
+                    System.out.println("El vehículo " + vehiculoAsignado + " se llena y va al safari.");
+                    cantidadDevisitas += Constantes.CAPACIDAD_VEHICULO;
+                    for (int j = 0; j < Constantes.CAPACIDAD_VEHICULO; j++) {
+                        persona = this.sacarDeFilaIda(); // Personas entran en el vehículo
+                        System.out.println(persona + " aborda el vehículo " + vehiculoAsignado +
+                                " al safari.");
+                        agregarAFilaRegreso(persona);
+                    }
+                    // Incrementar el contador de personas transportadas por el vehículo
+                    incrementarVehiculoTransportado(vehiculoAsignado);
+
+                    // Simular tiempo de safari
+                    Thread.sleep(ThreadLocalRandom.current().nextInt(300, 500));
+                    System.out.println("El vehículo " + vehiculoAsignado + " regresa del safari.");
+
+                    // Transportar de vuelta
+                    transportarDeRegreso(vehiculoAsignado);
+                }
+            } else {
+                System.out.println(persona + " espera para abordar el vehículo al safari.");
+            }
+        }
+    }
+
+    private void transportarDeRegreso(int vehiculoAsignado) throws InterruptedException {
+        synchronized (filaVehiculoRegreso) {
+            if (filaVehiculoRegreso.size() >= Constantes.CAPACIDAD_VEHICULO) {
+                System.out.println("El vehículo " + vehiculoAsignado + " se llena para el regreso.");
+                vehiculosTransportados[vehiculoAsignado] = Constantes.CAPACIDAD_VEHICULO;
+                for (int j = 0; j < Constantes.CAPACIDAD_VEHICULO; j++) {
+                    Persona persona = sacarDeFilaRegreso(); // Personas regresan al parque
+                    System.out.println(persona + " regresa en el vehículo " + vehiculoAsignado + " al parque.");
+                }
+            }
+        }
+    }
+    private synchronized int asignarVehiculo() {
+        for (int i = 0; i < Constantes.NUM_VEHICULOS; i++) {
+            int vehiculoActual = (indiceVehiculo + i) % Constantes.NUM_VEHICULOS;
+            if (semaforoVehiculo[vehiculoActual].tryAcquire()) {
+                // Asignar el vehículo y actualizar el índice circular
+                indiceVehiculo = (vehiculoActual + 1) % Constantes.NUM_VEHICULOS;
+                return vehiculoActual;
+            }
+        }
+        return -1; // No hay vehículos disponibles
+    }
+
+    public synchronized void agregarAFilaIda(Persona persona) {
+        filaVehiculoIda.add(persona);
+    }
+
+    public synchronized Persona sacarDeFilaIda() {
+        return filaVehiculoIda.poll();
+    }
+
+    public synchronized void agregarAFilaRegreso(Persona persona) {
+        filaVehiculoRegreso.add(persona);
+    }
+
+    public synchronized Persona sacarDeFilaRegreso() {
+        return filaVehiculoRegreso.poll();
+    }
+
+    public synchronized void incrementarVehiculoTransportado(int vehiculo) {
+        vehiculosTransportados[vehiculo]++;
+    }
+}
